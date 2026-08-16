@@ -725,6 +725,13 @@ function SpawnLogic:_onAggressiveAlert(entity, record)
   ow.emote = {
     npc = entity,
     frames = frames,
+    -- Gold's World:update ticks ANY ow.emote via `.left` unconditionally
+    -- (src/world/gen2/World.lua), regardless of who set it; without this
+    -- field it crashes next frame on `self.emote.left - 1` (nil arithmetic).
+    -- onDone here is never invoked by Gold's engine (that's a Gen 1
+    -- OverworldController behavior) -- the bx.alertAt fail-safe below is
+    -- what actually arms chase/flee, so this is purely a crash guard.
+    left = frames,
     onDone = function()
       if safariFlee then
         Behavior.markFleeReady(entity)
