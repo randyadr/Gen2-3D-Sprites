@@ -208,6 +208,27 @@ end
 -- is the one surface in this mode with room for a sentence -- and because a
 -- player who has just chosen the wrong file is owed a reason and not a row
 -- that quietly goes on saying IMPORT.
+
+-- Say where the file goes, on screen. Shared by the no-dialog platforms and
+-- by a dialog platform whose engine build cannot stage the pick (see below):
+-- both cases end at the same answer, dropping the ROM in baseroms/, and
+-- StadiumInstall.begin() already reads that folder directly with no staging
+-- step at all.
+--
+-- `reason` is StadiumInstall.begin()'s own error when THAT was already tried
+-- and still had nothing to build from -- shown ahead of the path instead of a
+-- bare repeat of instructions the player may have already followed.
+local function showFolderNote(game, reason)
+  local StadiumScreen = V.require("StadiumScreen")
+  if game and game.stack then
+    local body = StadiumInstall.romHintFile()
+    if reason then body = tostring(reason) .. " -- expected at: " .. body end
+    game.stack:push(StadiumScreen.newNote(game, label(),
+      isGen2() and "PUT POKEMON STADIUM 2 HERE:" or "PUT STADIUM US 1.0 HERE:",
+      body))
+  end
+end
+
 function StadiumRomPick.import(game)
   if StadiumInstall.status.state == "building" then return false end
   local StadiumScreen = V.require("StadiumScreen")
@@ -216,11 +237,7 @@ function StadiumRomPick.import(game)
   -- that is the whole of what the player is missing and the console is not
   -- somewhere they can read it.
   if not StadiumRomPick.canDialog() then
-    if game and game.stack then
-      game.stack:push(StadiumScreen.newNote(game, label(),
-        isGen2() and "PUT POKEMON STADIUM 2 HERE:" or "PUT STADIUM US 1.0 HERE:",
-        StadiumInstall.romHintFile()))
-    end
+    showFolderNote(game)
     return false
   end
 
@@ -236,7 +253,30 @@ function StadiumRomPick.import(game)
   end
 
   local bytes, err = StadiumRomPick.read(path)
-  if not bytes then return fail(err or "could not read that file") end
+  if not bytes then
+    -- "save directory unavailable" means EngineCompat.stageExternal could not
+    -- get an absolute path to copy the pick INTO -- current engine builds can
+    -- route mod persistence through a sandboxed backend that never exposes
+    -- one (see EngineCompat.fs). That is not the chosen file's fault and a
+    -- different file will not fix it, so try the one staging path that never
+    -- needed an absolute directory at all: baseroms/, read directly by
+    -- StadiumInstall.begin(). If a ROM is already sitting there -- likely,
+    -- since that is exactly the folder this screen would otherwise just
+    -- recite instructions for -- this finishes right here with no second
+    -- manual step and no dead-end "COULD NOT BUILD".
+    if err == "save directory unavailable" then
+      local beginOk, beginErr = StadiumInstall.begin()
+      if beginOk then
+        if game and game.stack then
+          game.stack:push(StadiumScreen.new(game, true))
+        end
+        return true
+      end
+      showFolderNote(game, beginErr)
+      return false
+    end
+    return fail(err or "could not read that file")
+  end
 
   local ok, beginErr = StadiumInstall.beginFrom(bytes, path)
   if not ok then return fail(tostring(beginErr)) end
