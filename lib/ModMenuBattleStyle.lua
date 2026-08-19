@@ -23,6 +23,7 @@ local M = {
   managerTaggedFromPause = 0,
   genericTagged = 0,
   genericSkipped = 0,
+  genericModal = 0,
   lastError = nil,
 }
 
@@ -577,6 +578,32 @@ local function genericDescription(state, rows, cursor)
   return cleanText(state.description or state.help or state.subtitle or "Add-on menu")
 end
 
+-- A row-list skin can only stand in for a screen that is DRAWING its row list.
+--
+-- Several of Gold's menus keep a sub-screen INSIDE the same state object
+-- rather than pushing a new one, and paint it from that state's own draw:
+-- Gen2PcMenu's CHANGE BOX box picker (src/ui/gen2/PcMenu.lua drawPanel, on
+-- self.picking) and its notice boxes (self.message) are the two this skin
+-- meets, and the START menu's QUIT confirmation (self.phase == "confirm") is
+-- the same shape.  The row list underneath does not change while one of them
+-- is up, so skinning straight through it draws a menu the player is no longer
+-- driving: CHANGE BOX looked like a dead row while A was really moving the
+-- current box, unseen.
+--
+-- So the skin stands down for those frames and lets the screen's own renderer
+-- draw, which is exactly what CUSTOM UI / MENUS = OFF does.  Every one of
+-- these starts from a full-screen white fill (Chrome.clear, or the window
+-- fill in drawWidescreen), so nothing underneath shows through in the one
+-- frame before isOpaque is back to its native value -- StateStack:visibleBase
+-- reads isOpaque before the draw that restores it.
+local function genericModalUp(state)
+  if type(state) ~= "table" then return false end
+  if state.picking then return true end
+  if state.message ~= nil then return true end
+  if state.phase == "confirm" then return true end
+  return false
+end
+
 local function drawGeneric(state, ww, wh)
   local rows, cursor, scroll = genericRows(state)
   if not rows then return false end
@@ -620,8 +647,9 @@ local function wrapGenericState(state)
 
   if type(nativeDraw) == "function" then
     state.draw = function(self, ...)
-      if not customUIEnabled() then
+      if not customUIEnabled() or genericModalUp(self) then
         self.isOpaque = nativeOpaque
+        if customUIEnabled() then M.genericModal = M.genericModal + 1 end
         return nativeDraw(self, ...)
       end
       self.isOpaque = false
@@ -633,8 +661,9 @@ local function wrapGenericState(state)
   end
   if type(nativeWide) == "function" then
     state.drawWidescreen = function(self, ww, wh, ...)
-      if not customUIEnabled() then
+      if not customUIEnabled() or genericModalUp(self) then
         self.isOpaque = nativeOpaque
+        if customUIEnabled() then M.genericModal = M.genericModal + 1 end
         return nativeWide(self, ww, wh, ...)
       end
       self.isOpaque = false
@@ -763,6 +792,7 @@ function M.status()
     managerTaggedFromPause = M.managerTaggedFromPause,
     genericTagged = M.genericTagged,
     genericSkipped = M.genericSkipped,
+    genericModal = M.genericModal,
     lastError = M.lastError,
   }
 end
