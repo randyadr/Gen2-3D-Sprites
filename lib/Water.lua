@@ -81,6 +81,7 @@ local Sky = V.require("Sky")
 local DayNight = V.require("DayNight")
 local ShadowMap = V.require("ShadowMap")
 local Mat4 = V.require("Mat4")
+local ClipSpace = V.require("ClipSpace")
 
 local Water = {}
 
@@ -433,7 +434,12 @@ vec4 position(mat4 transform_projection, vec4 vertex_position) {
     w.y -= dot(cd, cd) * curve.z;
   }
   vBent = w.xyz;
-  return vp * w;
+  // GEOMETRY only. skyPos/project below keep reading `vp` Y-down, which is
+  // how they turn a clip position into the canvas row this pass samples --
+  // they stay correct precisely because only this line moves. ClipSpace.lua
+  vec4 clip = vp * w;
+  clip.y *= CLIP_Y;
+  return clip;
 }
 #endif
 
@@ -1149,6 +1155,7 @@ local function source(grid, bare)
                 .. "#define WAVE_STEPS %d\n#define WAVE_STRIDE %.1f\n")
     :format(Water.RAY_STEPS, Water.RAY_REFINE, Water.WAVE_STEPS,
             Water.WAVE_STRIDE)
+  head = head .. ClipSpace.define
   if grid then head = head .. "#define VOXEL_GRID 1\n" end
   -- effect()'s parameter precision -- see the signature for why it cannot
   -- simply be spelled there. Empty is a define all the same: the params

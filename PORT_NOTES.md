@@ -1,3 +1,44 @@
+## LOVE 12 canvas clip space (iOS)
+
+Every 3D pass here builds its own projection and bypasses LOVE's
+`transform_projection`, so the mod, not LOVE, owns the clip-space convention.
+Those matrices are built **Y-down**: `Mat4.scale(1, -1, 1)` is folded into
+`Voxel3D.viewProjection` and `ShadowMap.update` so that clip Y = -1 is the top
+of the target. That is what lets every consumer read a canvas position straight
+off the same matrix with `(y / w * 0.5 + 0.5)` -- the horizon, the sun/moon
+disc, the battle pins, `ShadowMap.uvVP` and Water's screen-space march all do.
+
+LOVE 11 stores a canvas that way, so the matrix goes to the GPU untouched.
+LOVE 12 normalises clip space itself (`love_clipSpaceTransform`, applied to
+whatever `position()` returns) so clip Y = +1 is the top on every backend and
+target: OpenGL flips only while a render target is bound, Metal has nothing to
+flip. The Y-down matrix is then one flip too many and the 3D pass composites
+vertically mirrored.
+
+`lib/ClipSpace.lua` resolves this in one place. It exports `CLIP_Y` as a
+compile-time `#define` prepended to the three shaders that transform geometry
+with one of these matrices (`Voxel3D`, `ShadowMap`, `Water`), and those shaders
+multiply their clip Y by it. It is `1.0` on LOVE 11, a no-op the shader compiler
+folds away, so desktop and Android are untouched. **Do not "fix" the mirror by
+flipping the finished canvas instead:** the canvas is mixed, not uniform --
+`Weather.paintOverlay` draws 2D into it inside `Voxel3D.endScene` -- so a
+presentation flip would correct the world and invert the overlays.
+
+Why it only ever showed on Gen 2: gen1recomp's `Renderer:setWorldOverride` blit
+already compensates on iOS/LOVE 12, and the Gen 1 path goes through it. Gold's
+pipeline seam (`src/world/gen2/World.lua`) blits the pipeline canvas straight,
+so nothing compensated there.
+
+**Do not port this patch to a Gen 1 sibling unchanged.** Every mod in this
+family registers the same `voxel` pipeline id and carries the same
+`Mat4.scale(1, -1, 1)` fold, so the code looks identical -- but a Gen 1 mod's
+world canvas reaches the screen through `Renderer:setWorldOverride`, whose blit
+ALREADY flips on iOS/LOVE 12. That path is compensated today. Adding `CLIP_Y`
+there would correct the same mirror twice and invert Gen 1 instead. This mod is
+`"games": ["gen2"]`, so its own Gen 1 `installWorldOverride` branch is
+unreachable and is not affected either way. A Gen 1 port wants the engine's blit
+and the mod's fold reconciled together, not this patch copied across.
+
 ## v0.2.81 Gold party-leader follower binding
 
 - Trainer `follow` mode now treats the saved party slot as authoritative. Slot 1 remains the default, so Gold PARTY -> SWITCH naturally replaces the follower when the top-of-party Pokemon changes.

@@ -28,6 +28,7 @@
 local V = ...
 
 local Mat4 = V.require("Mat4")
+local ClipSpace = V.require("ClipSpace")
 local Voxel = V.require("VoxelState")
 local Quality = V.require("Quality")
 
@@ -148,6 +149,9 @@ local SHADER = [[
     // the projection is orthographic, so w is 1 and clip z IS the depth,
     // linear in world units along the sun line
     vDepth = c.z * 0.5 + 0.5;
+    // the same clip-space normalisation the scene shader applies, so the
+    // map is stored the way ShadowMap.uvVP reads it back. lib/ClipSpace.lua
+    c.y *= CLIP_Y;
     return c;
   }
 #endif
@@ -197,7 +201,7 @@ ShadowMap.bias = 0
 
 local function getShader()
   if shader == nil then
-    local ok, sh = pcall(love.graphics.newShader, SHADER)
+    local ok, sh = pcall(love.graphics.newShader, ClipSpace.define .. SHADER)
     shader = (ok and sh) or false
   end
   return shader or nil
