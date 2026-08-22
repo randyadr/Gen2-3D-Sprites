@@ -26,6 +26,7 @@
 local V = ...
 
 local Mat4 = V.require("Mat4")
+local ClipSpace = V.require("ClipSpace")
 local Voxel = V.require("VoxelState")
 local ShadowMap = V.require("ShadowMap")
 local VoxelGrid = V.require("VoxelGrid")
@@ -131,7 +132,13 @@ local SHADER = [[
     if (pull > 0.0) {
       w.xyz += normalize(eye - w.xyz) * pull;
     }
-    return vp * w;
+    // CLIP_Y undoes the Y-down flip folded into `vp` on a LOVE that
+    // normalises clip space itself; 1.0, and free, on LOVE 11. Every
+    // consumer of `vp` on the Lua side still reads it Y-down, which is
+    // exactly what keeps them agreeing with this. See lib/ClipSpace.lua.
+    vec4 clip = vp * w;
+    clip.y *= CLIP_Y;
+    return clip;
   }
 #endif
 #ifdef PIXEL
@@ -444,7 +451,8 @@ function Voxel3D.shader(grid)
     if grid and not derivativesOK() then
       shaders[grid] = false
     else
-      local src = grid and ("#define VOXEL_GRID 1\n" .. SHADER) or SHADER
+      local src = ClipSpace.define
+        .. (grid and ("#define VOXEL_GRID 1\n" .. SHADER) or SHADER)
       local ok, sh = pcall(love.graphics.newShader, src)
       shaders[grid] = ok and sh or false
     end

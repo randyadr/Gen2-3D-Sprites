@@ -671,6 +671,11 @@ mod.exports.directModSettingsMenu = DirectModSettingsMenu
 mod.exports.modSettingsPersistence = ModSettingsPersistence
 mod.exports.categorizedModSettings = CategorizedModSettings
 mod.exports.androidFullFrameFlip = AndroidFullFrameFlip
+-- Tells a host that this mod normalises clip space for LOVE 12 itself
+-- (see lib/ClipSpace.lua), so a host-side compatibility flip for the old
+-- upside-down behaviour must NOT also be applied -- the two would cancel
+-- and put the world back where it started.
+mod.exports.loveClipSpaceHandled = true
 mod.exports.categorizedModSettingsStatus = function()
   return CategorizedModSettings and CategorizedModSettings.status and CategorizedModSettings.status() or nil
 end
